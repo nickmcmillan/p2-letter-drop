@@ -1,0 +1,17 @@
+@font-face {
+  font-family: "druk";
+  font-display: swap;
+  font-style: normal;
+  src: url("./DrukWide-Heavy-Web.woff2") format("woff2"),
+       url("./DrukWide-Heavy-Web.woff") format("woff");
+}
+
+.App {
+  font-family: sans-serif;
+  text-align: center;
+}
+
+body {
+  margin: 0;
+  font-family: druk;
+}
