@@ -3,11 +3,21 @@ import ReactDOM from 'react-dom'
 import p2 from 'p2'
 import useDimensions from './useDimensions'
 import { useWindowWidth } from '@react-hook/window-size'
+import delay from 'delay'
 import style from './styles.module.css'
 
 import characters from './characters'
 
-const ssrWidth = 800
+function mapRange (value, low1, high1, low2, high2) {
+  return low2 + (high2 - low2) * (value - low1) / (high1 - low1);
+}
+
+const randomChoice = arr => {
+  const randIndex = Math.floor(Math.random() * arr.length);
+  return arr[randIndex];
+};
+
+const contextScale = 0.133
 
 const randomInRange = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
@@ -24,24 +34,36 @@ function App() {
   //   leading: false,
   // })
 
-  const DPR = 1//window.devicePixelRatio || 1
+  const DPR = window.devicePixelRatio || 1
 
   const worldRef = useRef()
+  const genericMaterialRef = useRef()
 
   // world and character set up, runs only once.
   useEffect(() => {
     worldRef.current = new p2.World({
-      gravity: [0, -9.82],
+      // gravity: [0, -9.82],
+      gravity: [0, -10],
       islandSplit: true,
       sleepMode: p2.World.BODY_SLEEPING,
       // Defaults to SAPBroadphase
     })
 
+    genericMaterialRef.current = new p2.Material()
+    worldRef.current.addContactMaterial(
+      new p2.ContactMaterial(genericMaterialRef.current, genericMaterialRef.current, { restitution: 0.2, stiffness: 1000 })
+    )
 
-    characters.forEach(c => {
-      c.body.addShape(c.shape)
-      worldRef.current.addBody(c.body)
-    })
+    async function getCharacters() {
+      for (let c of characters) {
+        c.shape.material = genericMaterialRef.current
+        c.body.addShape(c.shape)
+        worldRef.current.addBody(c.body)
+        await delay(200)
+      }
+    }
+    getCharacters();
+
   }, [])
 
   useEffect(() => {
@@ -61,23 +83,22 @@ function App() {
     let planeBody
     let mouseConstraint
 
-    const scaleX = -100
-    const scaleY = -100
+    const scale = -200
 
     worldRef.current.solver.tolerance = 0.001
     worldRef.current.solver.iterations = 1;
     // worldRef.current.solver.arrayStep = 1;
     
-
-
     ctx.lineWidth = 0.03;
     ctx.font = '10px Druk';
     
     // Add a plane
     const planeShape = new p2.Plane()
+
+    planeShape.material = genericMaterialRef.current
+    // console.log(planeShape.material)
     planeBody = new p2.Body({
-      position: [0, -5],
-      // mass: 0,
+      position: [0, (h - 50) / scale],
       allowSleep: true,
     })
     planeBody.addShape(planeShape)
@@ -87,10 +108,72 @@ function App() {
     const mouseBody = new p2.Body()
     worldRef.current.addBody(mouseBody)
 
-    canvas.addEventListener('pointerdown', function (event) {
+
+    function drawbox(char, boxBody, boxShape, x, y) {
+      
+      const tx = boxBody.position[0]
+      const ty = boxBody.position[1]
+
+      if (Math.abs(tx) > 10) {
+        boxBody.position[0] = randomInRange(-5, 5)
+        boxBody.position[1] = 8
+
+        boxBody.velocity[0] = randomInRange(-2, 2)
+        boxBody.velocity[1] = randomInRange(0, 2)
+
+        boxBody.angularVelocity = randomInRange(-2, 2)
+        
+      }
+
+      ctx.strokeStyle = 'pink'
+      ctx.save()
+      ctx.translate(tx, ty) // Translate to the center of the box
+      ctx.rotate(boxBody.angle) // Rotate to the box body frame
+
+      // render hit box
+      // ctx.rect(
+      //   -boxShape.width / 2,
+      //   -boxShape.height / 2,
+      //   boxShape.width,
+      //   boxShape.height,
+      // )
+
+      ctx.fillStyle = '#2c2c2c'
+
+      ctx.scale(contextScale, contextScale)
+      // ctx.rotate(Math.PI)
+      // ctx.stroke()
+      ctx.fillText(char, x, y)
+      ctx.restore()
+    }
+
+    function drawPlane() {
+      const y = planeBody.position[1]
+      ctx.moveTo(-w, y)
+      ctx.lineTo(w, y)
+    }
+
+
+    // Convert a canvas coordiante to physics coordinate
+    function getPhysicsCoord(e, canvas) {
+      const rect = canvas.getBoundingClientRect();
+      let x = (e.clientX - rect.left) * DPR;
+      let y = (e.clientY - rect.top) * DPR;
+
+      x = (x - w2 / 2) / scale;
+      y = (y - h2 / 2) / scale;
+
+      return [x, y];
+    }
+
+
+    const onPointerDown = function (e) {
+      // dismiss clicks from right or middle buttons
+      const mouseButton = e.button
+      if (mouseButton && (mouseButton !== 0 && mouseButton !== 1)) return
 
       // Convert the canvas coordinate to physics coordinates
-      const position = getPhysicsCoord(event, canvas)
+      const position = getPhysicsCoord(e, canvas)
 
       // Check if the cursor is inside the box
       const hitBodies = worldRef.current.hitTest(position, characters.map(c => c.body))
@@ -108,96 +191,33 @@ function App() {
         })
         worldRef.current.addConstraint(mouseConstraint)
       }
-    })
+    }
 
-    // Sync the mouse body to be at the cursor position
-    canvas.addEventListener('mousemove', function (e) {
-      const position = getPhysicsCoord(e, canvas)
+    const onMove = function (e) {
+      const position = getPhysicsCoord(e.touches ? e.touches[0] : e, canvas)
       mouseBody.position[0] = position[0]
       mouseBody.position[1] = position[1]
-    })
-    
-    canvas.addEventListener('touchmove', function (e) {
-      const position = getPhysicsCoord(e.touches[0], canvas)
-      mouseBody.position[0] = position[0]
-      mouseBody.position[1] = position[1]
-    })
+    }
 
-    // Remove the mouse constraint on mouse up
-    canvas.addEventListener('mouseup', function () {
+    const onUp = function (e) {
       worldRef.current.removeConstraint(mouseConstraint)
       mouseConstraint = null
-    })
-    
-    canvas.addEventListener('touchend', function () {
-      worldRef.current.removeConstraint(mouseConstraint)
-      mouseConstraint = null
-    })
-
-    // Convert a canvas coordiante to physics coordinate
-    function getPhysicsCoord(e, canvas) {
-      const rect = canvas.getBoundingClientRect();
-      let x = e.clientX - rect.left;
-      let y = e.clientY - rect.top;
-
-      x = (x - w / 2) / scaleX;
-      y = (y - h / 2) / scaleY;
-
-      return [x, y];
     }
 
-    function drawbox(char, boxBody, boxShape, x, y) {
-      
-      const tx = boxBody.position[0]
-      const ty = boxBody.position[1]
-
-      if (Math.abs(tx) > 10) {
-        boxBody.position[0] = randomInRange(-5, 5)
-        boxBody.position[1] = -1
-
-        boxBody.velocity[0] = randomInRange(-2, 2)
-        boxBody.velocity[1] = randomInRange(0, 2)
-
-        boxBody.angularVelocity = randomInRange(-2, 2)
-        
-      }
-
-      ctx.strokeStyle = 'pink'
-      ctx.save()
-      ctx.translate(tx, ty) // Translate to the center of the box
-      ctx.rotate(boxBody.angle) // Rotate to the box body frame
-
-      // render hit box
-      ctx.rect(
-        -boxShape.width / 2,
-        -boxShape.height / 2,
-        boxShape.width,
-        boxShape.height,
-      )
-
-      ctx.fillStyle = '#2c2c2c'
-
-      ctx.scale(0.1333, 0.1333)
-      // ctx.rotate(Math.PI)
-      // ctx.stroke()
-      ctx.fillText(char, x, y)
-      ctx.restore()
-    }
-
-    function drawPlane() {
-      const y = planeBody.position[1]
-      ctx.moveTo(-w, y)
-      ctx.lineTo(w, y)
-    }
+    document.addEventListener('pointerdown', onPointerDown, { passive: true, capture: false })
+    document.addEventListener('mousemove', onMove, { passive: true, capture: false })
+    document.addEventListener('touchmove', onMove, { passive: true, capture: false })
+    document.addEventListener('mouseup', onUp, { passive: true, capture: false })
+    document.addEventListener('touchend', onUp, { passive: true, capture: false })
 
     function render() {
       // Clear the canvas
-      ctx.clearRect(0, 0, w, h);
+      ctx.clearRect(0, 0, w2, h2);
 
       // Transform the canvas
       ctx.save();
-      ctx.translate(w / 2, h / 2); // Translate to the center
-      ctx.scale(scaleX, scaleY);
+      ctx.translate(w2 / 2, h2 / 2); // Translate to the center
+      ctx.scale(scale, scale);
 
       // Draw all bodies
       ctx.beginPath()
@@ -225,6 +245,11 @@ function App() {
 
     return () => {
       window.cancelAnimationFrame(rafRef.current)
+      document.removeEventListener('pointerdown', onPointerDown, { passive: true, capture: false })
+      document.removeEventListener('mousemove', onMove, { passive: true, capture: false })
+      document.removeEventListener('touchmove', onMove, { passive: true, capture: false })
+      document.removeEventListener('mouseup', onUp, { passive: true, capture: false })
+      document.removeEventListener('touchend', onUp, { passive: true, capture: false })
     }
   }, [width])
 
