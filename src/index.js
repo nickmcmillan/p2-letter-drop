@@ -21,18 +21,18 @@ const contextScale = 0.133
 
 const randomInRange = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
-
+const ssrWidth = 800
 
 function App() {
   
-  const [ref, { width, height }] = useDimensions()
+  const [ref, { width }] = useDimensions()
   const canvasRef = useRef()
   const rafRef = useRef()
 
-  // const windowWidth = useWindowWidth(ssrWidth, {
-  //   wait: 1000,
-  //   leading: false,
-  // })
+  const windowWidth = useWindowWidth(ssrWidth, {
+    wait: 1500,
+    leading: false,
+  })
 
   const DPR = window.devicePixelRatio || 1
 
@@ -51,7 +51,7 @@ function App() {
 
     genericMaterialRef.current = new p2.Material()
     worldRef.current.addContactMaterial(
-      new p2.ContactMaterial(genericMaterialRef.current, genericMaterialRef.current, { restitution: 0.2, stiffness: 1000 })
+      new p2.ContactMaterial(genericMaterialRef.current, genericMaterialRef.current, { stiffness: 500 })
     )
 
     async function getCharacters() {
@@ -67,16 +67,13 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (!width || !height) return
     if (typeof window === 'undefined') return
 
     const canvas = canvasRef.current
     const ctx = canvas.getContext('2d')
-    const w = width;
-    const h = height;
 
-    const w2 = width * DPR;
-    const h2 = height * DPR;
+    const w2 = windowWidth * DPR;
+    const h2 = (window.innerHeight * 0.75) * DPR;
     canvas.width = w2;
     canvas.height = h2;
 
@@ -98,7 +95,7 @@ function App() {
     planeShape.material = genericMaterialRef.current
     // console.log(planeShape.material)
     planeBody = new p2.Body({
-      position: [0, (h - 50) / scale],
+      position: [0, (h2 / 2 - 50) / scale],
       allowSleep: true,
     })
     planeBody.addShape(planeShape)
@@ -148,9 +145,9 @@ function App() {
     }
 
     function drawPlane(planeBody, ctx) {
-      const y = (h - 50) / scale//planeBody.position[1]
-      ctx.moveTo(-w, y)
-      ctx.lineTo(w, y)
+      const y = planeBody.position[1]
+      ctx.moveTo(-w2, y)
+      ctx.lineTo(w2, y)
     }
 
     // Convert a canvas coordiante to physics coordinate
@@ -198,7 +195,7 @@ function App() {
       mouseBody.position[1] = position[1]
     }
 
-    const onUp = function (e) {
+    const onUp = function () {
       worldRef.current.removeConstraint(mouseConstraint)
       mouseConstraint = null
     }
@@ -250,7 +247,7 @@ function App() {
       document.removeEventListener('mouseup', onUp, { passive: true, capture: false })
       document.removeEventListener('touchend', onUp, { passive: true, capture: false })
     }
-  }, [width])
+  }, [windowWidth])
 
   return (
     <section className={style.section} ref={ref}>
