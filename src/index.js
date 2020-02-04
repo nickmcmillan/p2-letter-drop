@@ -147,23 +147,22 @@ function App() {
       ctx.restore()
     }
 
-    function drawPlane() {
-      const y = planeBody.position[1]
+    function drawPlane(planeBody, ctx) {
+      const y = (h - 50) / scale//planeBody.position[1]
       ctx.moveTo(-w, y)
       ctx.lineTo(w, y)
     }
 
-
     // Convert a canvas coordiante to physics coordinate
     function getPhysicsCoord(e, canvas) {
-      const rect = canvas.getBoundingClientRect();
-      let x = (e.clientX - rect.left) * DPR;
-      let y = (e.clientY - rect.top) * DPR;
+      const rect = canvas.getBoundingClientRect()
+      let x = (e.clientX - rect.left) * DPR
+      let y = (e.clientY - rect.top) * DPR
 
-      x = (x - w2 / 2) / scale;
-      y = (y - h2 / 2) / scale;
+      x = (x - w2 / 2) / scale
+      y = (y - h2 / 2) / scale
 
-      return [x, y];
+      return [x, y]
     }
 
 
@@ -212,12 +211,12 @@ function App() {
 
     function render() {
       // Clear the canvas
-      ctx.clearRect(0, 0, w2, h2);
+      ctx.clearRect(0, 0, w2, h2)
 
       // Transform the canvas
-      ctx.save();
-      ctx.translate(w2 / 2, h2 / 2); // Translate to the center
-      ctx.scale(scale, scale);
+      ctx.save()
+      ctx.translate(w2 * 0.5, h2 * 0.5) // Translate to the center
+      ctx.scale(scale, scale)
 
       // Draw all bodies
       ctx.beginPath()
@@ -226,16 +225,16 @@ function App() {
         drawbox(character, body, shape, x, y)
       })
 
-      drawPlane();
+      drawPlane(planeBody, ctx)
 
       ctx.stroke()
 
       // Restore transform
-      ctx.restore();
+      ctx.restore()
     }
 
     function animate() {
-      rafRef.current = requestAnimationFrame(animate);
+      rafRef.current = requestAnimationFrame(animate)
       // Move physics bodies forward in time
       worldRef.current.step(1 / 45)
       render()
