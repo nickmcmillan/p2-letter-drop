@@ -34,7 +34,7 @@ function LetterDrop() {
   const [datGuiData, setDatGuiData] = useState({
     gravity: -9.82,
     relaxation: 4,
-    stiffness: 2500,
+    stiffness: 900,
     showHitboxes: false,
   })
 
@@ -262,7 +262,7 @@ function LetterDrop() {
     function animate() {
       rafRef.current = requestAnimationFrame(animate)
       // Move physics bodies forward in time
-      worldRef.current.step(1 / 45)
+      worldRef.current.step(1 / 50)
       render()
     }
 
@@ -296,9 +296,8 @@ function LetterDrop() {
       >
         <DatNumber path='gravity' label='gravity' min={-20} max={4} step={0.01} />
         <DatNumber path='relaxation' label='relaxation' min={0.05} max={4} step={0.01} />
-        <DatNumber path='stiffness' label='stiffness' min={20} max={5000} step={1} />
+        <DatNumber path='stiffness' label='stiffness' min={20} max={2000} step={1} />
         <DatBoolean path='showHitboxes' label='showHitboxes' />
-        
 
       </DatGui>
     </section>
