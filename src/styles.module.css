@@ -6,9 +6,15 @@
        url("./DrukWide-Heavy-Web.woff") format("woff");
 }
 
-.App {
-  font-family: sans-serif;
-  text-align: center;
+.section {
+  height: 100vw;
+  position: relative;
+  /* max-height: 60rem; */
+}
+
+.canvas {
+  /* max-width: 100%;
+  width: 100%; */
 }
 
 body {

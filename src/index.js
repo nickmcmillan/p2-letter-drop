@@ -1,122 +1,144 @@
 import React, { useEffect, useRef } from 'react'
 import ReactDOM from 'react-dom'
 import p2 from 'p2'
+import useDimensions from './useDimensions'
+import { useWindowWidth } from '@react-hook/window-size'
+import style from './styles.module.css'
 
-import './styles.css'
+import characters from './characters'
 
-const characters = [
-  {
-    character : 'M',
-    width: 1.8,
-    height: 1,
-    x: 6.8,
-    y: 3.5,
-  }
-]
+const ssrWidth = 800
+
+const randomInRange = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+
 
 function App() {
-  const myRef = useRef(null)
+  
+  const [ref, { width, height }] = useDimensions()
+  const canvasRef = useRef()
+  const rafRef = useRef()
+
+  // const windowWidth = useWindowWidth(ssrWidth, {
+  //   wait: 1000,
+  //   leading: false,
+  // })
+
+  const DPR = 1//window.devicePixelRatio || 1
+
+  const worldRef = useRef()
+
+  // world and character set up, runs only once.
+  useEffect(() => {
+    worldRef.current = new p2.World({
+      gravity: [0, -9.82],
+      islandSplit: true,
+      sleepMode: p2.World.BODY_SLEEPING,
+      // Defaults to SAPBroadphase
+    })
+
+
+    characters.forEach(c => {
+      c.body.addShape(c.shape)
+      worldRef.current.addBody(c.body)
+    })
+  }, [])
 
   useEffect(() => {
+    if (!width || !height) return
+    if (typeof window === 'undefined') return
 
-    const canvas = myRef.current
+    const canvas = canvasRef.current
     const ctx = canvas.getContext('2d')
-    const w = canvas.width;
-    const h = canvas.height;
+    const w = width;
+    const h = height;
 
-    let boxBody
+    const w2 = width * DPR;
+    const h2 = height * DPR;
+    canvas.width = w2;
+    canvas.height = h2;
+
     let planeBody
     let mouseConstraint
-    let mouseBody
 
-    const scaleX = 50
-    const scaleY = -50
-    let boxShape
-    let planeShape
+    const scaleX = -100
+    const scaleY = -100
 
-    const world = new p2.World({
-      gravity: [0, -9.82]
-    });
+    worldRef.current.solver.tolerance = 0.001
+    worldRef.current.solver.iterations = 1;
+    // worldRef.current.solver.arrayStep = 1;
+    
 
-    init();
-    animate();
 
-    function init() {
+    ctx.lineWidth = 0.03;
+    ctx.font = '10px Druk';
+    
+    // Add a plane
+    const planeShape = new p2.Plane()
+    planeBody = new p2.Body({
+      position: [0, -5],
+      // mass: 0,
+      allowSleep: true,
+    })
+    planeBody.addShape(planeShape)
+    worldRef.current.addBody(planeBody)
 
-      ctx.lineWidth = 0.05;
-      ctx.font = '10px Druk';
+    // Create a body for the cursor
+    const mouseBody = new p2.Body()
+    worldRef.current.addBody(mouseBody)
 
-      characters.forEach(c => {
-        
-      })
+    canvas.addEventListener('pointerdown', function (event) {
 
-      // Add a box
-      boxShape = new p2.Box({ 
-        width: 1.8,
-        height: 1,
-      })
+      // Convert the canvas coordinate to physics coordinates
+      const position = getPhysicsCoord(event, canvas)
 
-      boxBody = new p2.Body({
-        mass: 1,
-        position: [0, 3],
-        angularVelocity: 1
-      })
+      // Check if the cursor is inside the box
+      const hitBodies = worldRef.current.hitTest(position, characters.map(c => c.body))
 
-      boxBody.addShape(boxShape);
-      world.addBody(boxBody);
+      if (hitBodies.length) {
+        // Move the mouse body to the cursor position
+        mouseBody.position[0] = position[0]
+        mouseBody.position[1] = position[1]
 
-      // Add a plane
-      planeShape = new p2.Plane();
-      planeBody = new p2.Body();
-      planeBody.addShape(planeShape);
-      world.addBody(planeBody);
+        // Create a RevoluteConstraint.
+        // This constraint lets the bodies rotate around a common point
+        mouseConstraint = new p2.RevoluteConstraint(mouseBody, hitBodies[0], {
+          worldPivot: position,
+          collideConnected: false
+        })
+        worldRef.current.addConstraint(mouseConstraint)
+      }
+    })
 
-      // Create a body for the cursor
-      mouseBody = new p2.Body();
-      world.addBody(mouseBody);
+    // Sync the mouse body to be at the cursor position
+    canvas.addEventListener('mousemove', function (e) {
+      const position = getPhysicsCoord(e, canvas)
+      mouseBody.position[0] = position[0]
+      mouseBody.position[1] = position[1]
+    })
+    
+    canvas.addEventListener('touchmove', function (e) {
+      const position = getPhysicsCoord(e.touches[0], canvas)
+      mouseBody.position[0] = position[0]
+      mouseBody.position[1] = position[1]
+    })
 
-      canvas.addEventListener('mousedown', function (event) {
-
-        // Convert the canvas coordinate to physics coordinates
-        const position = getPhysicsCoord(event);
-
-        // Check if the cursor is inside the box
-        const hitBodies = world.hitTest(position, [boxBody]);
-
-        if (hitBodies.length) {
-          // Move the mouse body to the cursor position
-          mouseBody.position[0] = position[0];
-          mouseBody.position[1] = position[1];
-
-          // Create a RevoluteConstraint.
-          // This constraint lets the bodies rotate around a common point
-          mouseConstraint = new p2.RevoluteConstraint(mouseBody, boxBody, {
-            worldPivot: position,
-            collideConnected: false
-          });
-          world.addConstraint(mouseConstraint);
-        }
-      });
-
-      // Sync the mouse body to be at the cursor position
-      canvas.addEventListener('mousemove', function (event) {
-        const position = getPhysicsCoord(event);
-        mouseBody.position[0] = position[0];
-        mouseBody.position[1] = position[1];
-      });
-
-      // Remove the mouse constraint on mouse up
-      canvas.addEventListener('mouseup', function (event) {
-        world.removeConstraint(mouseConstraint);
-        mouseConstraint = null;
-      });
-    }
+    // Remove the mouse constraint on mouse up
+    canvas.addEventListener('mouseup', function () {
+      worldRef.current.removeConstraint(mouseConstraint)
+      mouseConstraint = null
+    })
+    
+    canvas.addEventListener('touchend', function () {
+      worldRef.current.removeConstraint(mouseConstraint)
+      mouseConstraint = null
+    })
 
     // Convert a canvas coordiante to physics coordinate
-    function getPhysicsCoord(mouseEvent) {
+    function getPhysicsCoord(e, canvas) {
       const rect = canvas.getBoundingClientRect();
-      let x = mouseEvent.clientX - rect.left;
-      let y = mouseEvent.clientY - rect.top;
+      let x = e.clientX - rect.left;
+      let y = e.clientY - rect.top;
 
       x = (x - w / 2) / scaleX;
       y = (y - h / 2) / scaleY;
@@ -124,16 +146,28 @@ function App() {
       return [x, y];
     }
 
-    function drawbox({ char, x, y }) {
-      ctx.beginPath()
+    function drawbox(char, boxBody, boxShape, x, y) {
+      
+      const tx = boxBody.position[0]
+      const ty = boxBody.position[1]
 
-      const x = boxBody.position[0]
-      const y = boxBody.position[1]
+      if (Math.abs(tx) > 10) {
+        boxBody.position[0] = randomInRange(-5, 5)
+        boxBody.position[1] = -1
+
+        boxBody.velocity[0] = randomInRange(-2, 2)
+        boxBody.velocity[1] = randomInRange(0, 2)
+
+        boxBody.angularVelocity = randomInRange(-2, 2)
+        
+      }
 
       ctx.strokeStyle = 'pink'
       ctx.save()
-      ctx.translate(x, y) // Translate to the center of the box
+      ctx.translate(tx, ty) // Translate to the center of the box
       ctx.rotate(boxBody.angle) // Rotate to the box body frame
+
+      // render hit box
       ctx.rect(
         -boxShape.width / 2,
         -boxShape.height / 2,
@@ -144,8 +178,9 @@ function App() {
       ctx.fillStyle = '#2c2c2c'
 
       ctx.scale(0.1333, 0.1333)
-      ctx.rotate(Math.PI)
-      ctx.fillText('M', -6.8, 3.5);
+      // ctx.rotate(Math.PI)
+      // ctx.stroke()
+      ctx.fillText(char, x, y)
       ctx.restore()
     }
 
@@ -153,7 +188,6 @@ function App() {
       const y = planeBody.position[1]
       ctx.moveTo(-w, y)
       ctx.lineTo(w, y)
-      ctx.stroke()
     }
 
     function render() {
@@ -166,29 +200,41 @@ function App() {
       ctx.scale(scaleX, scaleY);
 
       // Draw all bodies
-      drawbox();
+      ctx.beginPath()
+      
+      characters.forEach(({ character, body, shape, x, y}) => {
+        drawbox(character, body, shape, x, y)
+      })
+
       drawPlane();
+
+      ctx.stroke()
 
       // Restore transform
       ctx.restore();
     }
 
-    // Animation loop
     function animate() {
-      requestAnimationFrame(animate);
-
+      rafRef.current = requestAnimationFrame(animate);
       // Move physics bodies forward in time
-      world.step(1 / 60);
-
-      // Render scene
-      render();
+      worldRef.current.step(1 / 45)
+      render()
     }
-  }, [])
+
+    animate()
+
+    return () => {
+      window.cancelAnimationFrame(rafRef.current)
+    }
+  }, [width])
 
   return (
-    <div className="App">
-      <canvas width="600" height="400" ref={myRef} />
-    </div>
+    <section className={style.section} ref={ref}>
+      <canvas
+        ref={canvasRef}
+        className={style.canvas}
+      />
+    </section>
   )
 }
 
