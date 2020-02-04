@@ -1,8 +1,9 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import ReactDOM from 'react-dom'
 import p2 from 'p2'
 import { useWindowWidth } from '@react-hook/window-size'
 import delay from 'delay'
+import DatGui, { DatNumber, DatBoolean } from '@tim-soft/react-dat-gui'
 import style from './styles.module.css'
 
 import characters from './characters'
@@ -20,6 +21,7 @@ function LetterDrop() {
   
   const canvasRef = useRef()
   const rafRef = useRef()
+  const worldRef = useRef()
 
   const windowWidth = useWindowWidth(ssrWidth, {
     wait: 1500,
@@ -28,10 +30,22 @@ function LetterDrop() {
 
   const DPR = window.devicePixelRatio || 1
 
-  const worldRef = useRef()
-  const genericMaterialRef = useRef()
 
+  const [datGuiData, setDatGuiData] = useState({
+    gravity: -9.82,
+    relaxation: 4,
+    stiffness: 2500,
+    showHitboxes: false,
+  })
 
+  const handleUpdate = newData => setDatGuiData(newData)
+
+  const {
+    gravity,
+    relaxation,
+    stiffness,
+    showHitboxes,
+  } = datGuiData
 
   function drawPlane(planeBody, ctx, w2) {
     const y = planeBody.position[1]
@@ -40,49 +54,38 @@ function LetterDrop() {
   }
 
 
-  // world and character set up, runs only once.
+  // world set up, strictly run only once
   useEffect(() => {
     worldRef.current = new p2.World({
-      gravity: [0, -9.82],
       islandSplit: true,
       // Defaults to SAPBroadphase
     })
-    
+    worldRef.current.solver.iterations = 0.1
+    worldRef.current.solver.tolerance = 0.001
+
+    console.log(worldRef.current)
+
+    const genericMaterial = new p2.Material()
+    const contactMaterial = new p2.ContactMaterial(genericMaterial, genericMaterial)
+
+    worldRef.current.defaultMaterial = genericMaterial
+    worldRef.current.addContactMaterial(contactMaterial)
 
     // https://github.com/schteppe/p2.js/issues/251
     worldRef.current.sleepMode = p2.World.BODY_SLEEPING
-    worldRef.current.solver.iterations = 0.01
-    worldRef.current.doProfiling = true;
-    
 
-
-    genericMaterialRef.current = new p2.Material()
-    // genericMaterialRef.current.stiffness = 1500;
-    // genericMaterialRef.current.relaxation = 3;
-    // genericMaterialRef.current.frictionStiffness = 1e8;
-    // genericMaterialRef.current.frictionRelaxation = 99999;
-    genericMaterialRef.current.friction = 0
-
-    console.log(genericMaterialRef.current)
-    
-
-    worldRef.current.addContactMaterial(
-      new p2.ContactMaterial(genericMaterialRef.current, genericMaterialRef.current, { restitution: 0.1, stiffness: 11500 })
-    )
-
-    worldRef.current.defaultMaterial = genericMaterialRef.current
-
+    // letter set up
     async function addLetters() {
       for (let c of characters) {
-        c.shape.material = genericMaterialRef.current
-        
+        await delay(200)
+        c.shape.material = genericMaterial
+
         c.body.allowSleep = true
         c.fillStyle = Math.random() > 0.25 ? '#2c2c2c' : '#ddd' // random colour split
-        c.body.sleepSpeedLimit = 0.5; // Body will feel sleepy if speed < 1
-        c.body.sleepTimeLimit = 2; // Body falls asleep after being sleepy for 1s
+        c.body.sleepSpeedLimit = 0.5 // Body will feel sleepy if speed < x
+        c.body.sleepTimeLimit = 2 // Body falls asleep after being sleepy for x secondss
         c.body.addShape(c.shape)
         worldRef.current.addBody(c.body)
-        await delay(200)
       }
     }
 
@@ -92,14 +95,20 @@ function LetterDrop() {
       // TODO: maybe world clear?
       worldRef.current.clear()
     }
-
   }, [])
+
+  // dat gui mods
+  useEffect(() => {
+    worldRef.current.gravity = [0, gravity]
+    worldRef.current.setGlobalStiffness(stiffness)
+    worldRef.current.setGlobalRelaxation(relaxation)
+  }, [relaxation, stiffness, gravity])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
 
     // need a wake up on resize, cos floor plane will have moved
-    characters.forEach(c => c.body.wakeUp())
+    worldRef.current.bodies.forEach(b => b.wakeUp())
 
     const scaleContextSize = windowWidth <= 768 ? scaleContextLg : scaleContextSm
 
@@ -114,18 +123,12 @@ function LetterDrop() {
     let planeBody
     let mouseConstraint
 
-    worldRef.current.solver.tolerance = 0.001
-    worldRef.current.solver.iterations = 4
-    // worldRef.current.solver.arrayStep = 1
-    
     ctx.lineWidth = 0.03
     ctx.font = '10px Druk'
     
     // Add a plane
     const planeShape = new p2.Plane()
 
-    planeShape.material = genericMaterialRef.current
-    // console.log(planeShape.material)
     planeBody = new p2.Body({
       position: [0, (h2 * 0.5 - 50) / scaleContextSize],
       allowSleep: true,
@@ -144,8 +147,8 @@ function LetterDrop() {
       let x = (e.clientX - rect.left) * DPR
       let y = (e.clientY - rect.top) * DPR
 
-      x = (x - w2 / 2) / scaleContextSize
-      y = (y - h2 / 2) / scaleContextSize
+      x = (x - w2 * 0.5) / scaleContextSize
+      y = (y - h2 * 0.5) / scaleContextSize
 
       return [x, y]
     }
@@ -156,29 +159,27 @@ function LetterDrop() {
       const tx = boxBody.position[0]
       const ty = boxBody.position[1]
 
+      // reset boxBody if out of bounds
       if (Math.abs(tx) > 10) {
         boxBody.position[0] = randomInRange(-5, 5)
         boxBody.position[1] = 8
-
         boxBody.velocity[0] = randomInRange(-2, 2)
         boxBody.velocity[1] = randomInRange(0, 2)
-
         boxBody.angularVelocity = randomInRange(-5, 5)
-        
       }
 
-      ctx.strokeStyle = 'pink'
+      
       ctx.save()
       ctx.translate(tx, ty) // Translate to the center of the box
       ctx.rotate(boxBody.angle) // Rotate to the box body frame
 
       // render hit box
-      // ctx.rect(
-      //   -boxShape.width / 2,
-      //   -boxShape.height / 2,
-      //   boxShape.width,
-      //   boxShape.height,
-      // )
+      ctx.rect(
+        -boxShape.width / 2,
+        -boxShape.height / 2,
+        boxShape.width,
+        boxShape.height,
+      )
 
       ctx.fillStyle = fillStyle
 
@@ -198,7 +199,7 @@ function LetterDrop() {
       // Convert the canvas coordinate to physics coordinates
       const position = getPhysicsCoord(e, canvas, w2, h2, scaleContextSize)
 
-      // Check if the cursor is inside the box
+      // Check if the cursor is inside a body
       const hitBodies = worldRef.current.hitTest(position, characters.map(c => c.body))
 
       if (hitBodies.length) {
@@ -248,7 +249,11 @@ function LetterDrop() {
       characters.forEach(({ character, body, shape, x, y, fillStyle }) => drawbox(character, body, shape, x, y, fillStyle))
       drawPlane(planeBody, ctx, w2)
 
-      ctx.stroke()
+
+      if (showHitboxes) {
+        ctx.strokeStyle = 'blue'
+        ctx.stroke()
+      }
 
       // Restore transform
       ctx.restore()
@@ -257,7 +262,7 @@ function LetterDrop() {
     function animate() {
       rafRef.current = requestAnimationFrame(animate)
       // Move physics bodies forward in time
-      worldRef.current.step(1 / 40)
+      worldRef.current.step(1 / 45)
       render()
     }
 
@@ -271,7 +276,7 @@ function LetterDrop() {
       document.removeEventListener('mouseup', onUp, { passive: true, capture: false })
       document.removeEventListener('touchend', onUp, { passive: true, capture: false })
     }
-  }, [windowWidth, DPR])
+  }, [windowWidth, DPR, showHitboxes])
 
   return (
     <section className={style.section}>
@@ -279,6 +284,23 @@ function LetterDrop() {
         ref={canvasRef}
         className={style.canvas}
       />
+
+      <DatGui
+        onUpdate={handleUpdate}
+        data={datGuiData}
+        style={{
+          position: 'absolute',
+          bottom: '0',
+          top: 'inherit',
+        }}
+      >
+        <DatNumber path='gravity' label='gravity' min={-20} max={4} step={0.01} />
+        <DatNumber path='relaxation' label='relaxation' min={0.05} max={4} step={0.01} />
+        <DatNumber path='stiffness' label='stiffness' min={20} max={5000} step={1} />
+        <DatBoolean path='showHitboxes' label='showHitboxes' />
+        
+
+      </DatGui>
     </section>
   )
 }

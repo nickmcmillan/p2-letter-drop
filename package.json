@@ -6,6 +6,7 @@
   "main": "src/index.js",
   "dependencies": {
     "@react-hook/window-size": "^1.0.12",
+    "@tim-soft/react-dat-gui": "^4.0.11",
     "delay": "^4.3.0",
     "p2": "0.7.1",
     "react": "16.8.6",
