@@ -31,17 +31,6 @@ function LetterDrop() {
   const worldRef = useRef()
   const genericMaterialRef = useRef()
 
-  // Convert a canvas coordiante to physics coordinate
-  function getPhysicsCoord(e, canvas, w2, h2, scaleContextSize) {
-    const rect = canvas.getBoundingClientRect()
-    let x = (e.clientX - rect.left) * DPR
-    let y = (e.clientY - rect.top) * DPR
-
-    x = (x - w2 / 2) / scaleContextSize
-    y = (y - h2 / 2) / scaleContextSize
-
-    return [x, y]
-  }
 
 
   function drawPlane(planeBody, ctx, w2) {
@@ -83,19 +72,21 @@ function LetterDrop() {
 
     worldRef.current.defaultMaterial = genericMaterialRef.current
 
-    async function getCharacters() {
+    async function addLetters() {
       for (let c of characters) {
         c.shape.material = genericMaterialRef.current
         
         c.body.allowSleep = true
-        c.body.sleepSpeedLimit = 1; // Body will feel sleepy if speed < 1
-        c.body.sleepTimeLimit = 1; // Body falls asleep after being sleepy for 1s
+        c.fillStyle = Math.random() > 0.25 ? '#2c2c2c' : '#ddd' // random colour split
+        c.body.sleepSpeedLimit = 0.5; // Body will feel sleepy if speed < 1
+        c.body.sleepTimeLimit = 2; // Body falls asleep after being sleepy for 1s
         c.body.addShape(c.shape)
         worldRef.current.addBody(c.body)
         await delay(200)
       }
     }
-    getCharacters();
+
+    addLetters()
 
     return () => {
       // TODO: maybe world clear?
@@ -147,7 +138,20 @@ function LetterDrop() {
     worldRef.current.addBody(mouseBody)
 
 
-    function drawbox(char, boxBody, boxShape, x, y) {
+    // Convert a canvas coordiante to physics coordinate
+    function getPhysicsCoord(e, canvas, w2, h2, scaleContextSize) {
+      const rect = canvas.getBoundingClientRect()
+      let x = (e.clientX - rect.left) * DPR
+      let y = (e.clientY - rect.top) * DPR
+
+      x = (x - w2 / 2) / scaleContextSize
+      y = (y - h2 / 2) / scaleContextSize
+
+      return [x, y]
+    }
+
+
+    function drawbox(char, boxBody, boxShape, x, y, fillStyle) {
       
       const tx = boxBody.position[0]
       const ty = boxBody.position[1]
@@ -169,14 +173,14 @@ function LetterDrop() {
       ctx.rotate(boxBody.angle) // Rotate to the box body frame
 
       // render hit box
-      ctx.rect(
-        -boxShape.width / 2,
-        -boxShape.height / 2,
-        boxShape.width,
-        boxShape.height,
-      )
+      // ctx.rect(
+      //   -boxShape.width / 2,
+      //   -boxShape.height / 2,
+      //   boxShape.width,
+      //   boxShape.height,
+      // )
 
-      ctx.fillStyle = '#2c2c2c'
+      ctx.fillStyle = fillStyle
 
       ctx.scale(scaleCharacter, scaleCharacter)
       ctx.rotate(Math.PI)
@@ -241,7 +245,7 @@ function LetterDrop() {
       // Draw all bodies
       ctx.beginPath()
       
-      characters.forEach(({ character, body, shape, x, y}) => drawbox(character, body, shape, x, y))
+      characters.forEach(({ character, body, shape, x, y, fillStyle }) => drawbox(character, body, shape, x, y, fillStyle))
       drawPlane(planeBody, ctx, w2)
 
       ctx.stroke()
@@ -253,7 +257,7 @@ function LetterDrop() {
     function animate() {
       rafRef.current = requestAnimationFrame(animate)
       // Move physics bodies forward in time
-      worldRef.current.step(1 / 45)
+      worldRef.current.step(1 / 40)
       render()
     }
 
@@ -267,7 +271,7 @@ function LetterDrop() {
       document.removeEventListener('mouseup', onUp, { passive: true, capture: false })
       document.removeEventListener('touchend', onUp, { passive: true, capture: false })
     }
-  }, [windowWidth])
+  }, [windowWidth, DPR])
 
   return (
     <section className={style.section}>
