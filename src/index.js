@@ -259,10 +259,13 @@ function LetterDrop() {
       ctx.restore()
     }
 
+    const timeStep = windowWidth < 768 ? 35 : 45
+
     function animate() {
       rafRef.current = requestAnimationFrame(animate)
       // Move physics bodies forward in time
-      worldRef.current.step(1 / 50)
+      
+      worldRef.current.step(1 / timeStep)
       render()
     }
 
